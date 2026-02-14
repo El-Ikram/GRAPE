@@ -94,8 +94,10 @@ jobs:
           if [ -n "$META" ]; then
             echo "Found metadata file: $META"
             cat "$META"
-            MODEL=$(grep -i '^model:' "$META" | head -1 | sed 's/^[Mm]odel:\s*//' | tr ',' ' ')
-            NOTES=$(grep -i '^notes:' "$META" | head -1 | sed 's/^[Nn]otes:\s*//' | tr ',' ' ')
+            MODEL=$(awk -F': ' '/^[Mm]odel:/{print $2}' "$META" | head -1 | tr ',' ' ' | xargs)
+            NOTES=$(awk -F': ' '/^[Nn]otes:/{print $2}' "$META" | head -1 | tr ',' ' ' | xargs)
+            echo "Parsed MODEL=$MODEL"
+            echo "Parsed NOTES=$NOTES"
           else
             echo "No meta.yaml found in submissions/inbox/${TEAM}/"
             ls -la submissions/inbox/${TEAM}/ 2>/dev/null || echo "Team folder not found"
