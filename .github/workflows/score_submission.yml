@@ -59,6 +59,44 @@ jobs:
         run: python competition/validate_submission.py /tmp/predictions.csv data/public/test_data.csv
 
       - name: Evaluate
+        id: eval
         run: |
           echo "${{ secrets.TEST_LABELS_CSV }}" > /tmp/test_labels.csv
-          python competition/evaluate.py /tmp/predictions.csv /tmp/test_labels.csv
+          OUTPUT=$(python competition/evaluate.py /tmp/predictions.csv /tmp/test_labels.csv)
+          echo "$OUTPUT"
+          F1=$(echo "$OUTPUT" | grep MACRO_F1 | cut -d= -f2)
+          AUC=$(echo "$OUTPUT" | grep AUROC | cut -d= -f2)
+          echo "f1=$F1" >> "$GITHUB_OUTPUT"
+          echo "auc=$AUC" >> "$GITHUB_OUTPUT"
+
+      - name: Update leaderboard
+        run: |
+          TEAM="${{ steps.team.outputs.name }}"
+          F1="${{ steps.eval.outputs.f1 }}"
+          AUC="${{ steps.eval.outputs.auc }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Append to leaderboard CSV
+          echo "${TIMESTAMP},${TEAM},,${F1},AUROC=${AUC}" >> leaderboard/leaderboard.csv
+
+          # Render leaderboard markdown
+          python competition/render_leaderboard.py
+
+      - name: Commit leaderboard update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add leaderboard/
+          git commit -m "🏆 Leaderboard update: ${{ steps.team.outputs.name }} (F1=${{ steps.eval.outputs.f1 }})"
+          git push
+
+      - name: Comment score on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ Submission Scored Successfully\n\n| Metric | Score |\n|--------|-------|\n| **Macro F1** | ${{ steps.eval.outputs.f1 }} |\n| **AUROC** | ${{ steps.eval.outputs.auc }} |\n\nThe leaderboard has been updated. You may now close this PR.`
+            })
